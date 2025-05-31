@@ -3,6 +3,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP, AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
+import hashlib
 import socket
 import json
 import os
@@ -54,9 +55,28 @@ def handle_device(conn):
         session_key = cipher_rsa_priv.decrypt(encrypted_session_key)
         print("[Servidor] Clave de sesión recibida.")
 
-        # Paso 5: Recibir mensaje cifrado con AES
-        iv = conn.recv(16)
-        ciphertext = conn.recv(1024)
+        # Paso 5: Recibir mensaje cifrado
+        iv = recv_exact(conn, 16)
+
+        # Recibir longitud del ciphertext
+        length_bytes = recv_exact(conn, 4)
+        ciphertext_length = int.from_bytes(length_bytes, 'big')
+
+        # Recibir ciphertext
+        ciphertext = recv_exact(conn, ciphertext_length)
+
+        # Recibir hash
+        received_hash = recv_exact(conn, 32)
+
+        # Verificar integridad del mensaje
+        calculated_hash = hashlib.sha256(ciphertext).digest()
+        if received_hash != calculated_hash:
+            print("[Servidor] Advertencia: integridad comprometida.")
+            return
+        else:
+            print("[Servidor] Integridad del mensaje verificada.")
+
+        # Descifrar y mostrar mensaje
         cipher_aes = AES.new(session_key, AES.MODE_CBC, iv)
         message = unpad(cipher_aes.decrypt(ciphertext), AES.block_size)
         print(f"[Servidor] Mensaje recibido: {message.decode()}")
@@ -65,13 +85,32 @@ def handle_device(conn):
         response = b"Hola dispositivo, soy el servidor."
         cipher_response = AES.new(session_key, AES.MODE_CBC)
         response_encrypted = cipher_response.encrypt(pad(response, AES.block_size))
-        conn.sendall(cipher_response.iv + response_encrypted)
+
+        # Calcular hash del mensaje cifrado
+        hash_response = hashlib.sha256(response_encrypted).digest()
+
+        # Enviar IV + mensaje cifrado
+        conn.sendall(cipher_response.iv)
+        conn.sendall(response_encrypted)
+
+        # Enviar hash
+        conn.sendall(hash_response)
         print("[Servidor] Respuesta enviada al dispositivo.")
 
     except Exception as e:
         print(f"[Servidor] Error durante la comunicaci\u00f3n: {e}")
     finally:
         conn.close()
+# Recibe exactamente 'n' bytes del socket, esperando si es necesario hasta completar la cantidad.       
+def recv_exact(sock, n):
+    data = b""
+    while len(data) < n:
+        packet = sock.recv(n - len(data))
+        if not packet:
+            return None
+        data += packet
+    return data
+
 
 if __name__ == "__main__":
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
