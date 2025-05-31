@@ -1,13 +1,16 @@
-#Device
+# Device.py con pausas de demostración
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP, AES
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
-import hashlib
+import hashlib 
 import json
 import os
 import socket
 import time
+
+#Control de velocidad para demostración
+demo_delay = 1.2  # segundos entre pasos visibles
 
 # Ruta al registro exportado por la RA
 data_dir = "ra_data"
@@ -26,7 +29,8 @@ def load_device_credentials(device_id):
 
 def device_main(device_id):
     pub, priv, server_pub = load_device_credentials(device_id)
-    print(f"[Dispositivo {device_id}] Claves cargadas.")
+    print(f"[Dispositivo {device_id}] Claves cargadas.", flush=True)
+    time.sleep(demo_delay)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect(("localhost", 9090))
@@ -40,65 +44,59 @@ def device_main(device_id):
         cipher_rsa = PKCS1_OAEP.new(server_pub)
         encrypted_nonce = cipher_rsa.encrypt(nonce)
         s.sendall(encrypted_nonce)
-        print("[Dispositivo] Nonce enviado al servidor.")
+        print("[Dispositivo] Nonce enviado al servidor.", flush=True)
+        time.sleep(demo_delay)
 
         # Paso 3: Recibir el nonce de vuelta cifrado con la clave pública del dispositivo
         encrypted_response = s.recv(256)
         cipher_rsa_priv = PKCS1_OAEP.new(priv)
         response_nonce = cipher_rsa_priv.decrypt(encrypted_response)
         if response_nonce != nonce:
-            print("[Dispositivo] Falló la autenticación del servidor.")
+            print("[Dispositivo] Falló la autenticación del servidor.", flush=True)
             return
-        print("[Dispositivo] Autenticación mutua completada.")
+        print("[Dispositivo] Autenticación mutua completada.", flush=True)
+        time.sleep(demo_delay)
 
         # Paso 4: Generar clave AES y enviarla cifrada con clave pública del servidor
         session_key = get_random_bytes(16)  # AES-128
         encrypted_session_key = cipher_rsa.encrypt(session_key)
         s.sendall(encrypted_session_key)
-        print("[Dispositivo] Clave de sesión enviada.")
+        print("[Dispositivo] Clave de sesión enviada.", flush=True)
+        time.sleep(demo_delay)
 
         # Paso 5: Enviar mensaje cifrado con AES
         message = b"Hola servidor, soy el dispositivo."
         cipher_aes = AES.new(session_key, AES.MODE_CBC)
         ciphertext = cipher_aes.encrypt(pad(message, AES.block_size))
-
-        # Calcular hash del ciphertext
         hash_message = hashlib.sha256(ciphertext).digest()
 
-        # Enviar IV (16 bytes)
         s.sendall(cipher_aes.iv)
-
-        # Enviar longitud del ciphertext (4 bytes, entero codificado en big-endian)
         s.sendall(len(ciphertext).to_bytes(4, 'big'))
-
-        # Enviar ciphertext
         s.sendall(ciphertext)
-
-        # Enviar hash
         s.sendall(hash_message)
-        print("[Dispositivo] Mensaje enviado al servidor.")
+        print("[Dispositivo] Mensaje enviado al servidor.", flush=True)
+        time.sleep(demo_delay)
 
         # Paso 6: Recibir respuesta cifrada
         iv_response = s.recv(16)
-
-        # Recibir mensaje cifrado y hash
-        encrypted_reply = recv_exact(s, 48)  
+        encrypted_reply = recv_exact(s, 48)
         hash_received = recv_exact(s, 32)
 
         # Verificar integridad
         calculated_hash = hashlib.sha256(encrypted_reply).digest()
         if hash_received != calculated_hash:
-            print("[Dispositivo] Advertencia: integridad de la respuesta comprometida.")
+            print("[Dispositivo] Advertencia: integridad de la respuesta comprometida.", flush=True)
             return
-        else:
-            print("[Dispositivo] Integridad de la respuesta verificada.")
+        print("[Dispositivo] Integridad de la respuesta verificada.", flush=True)
+        time.sleep(demo_delay)
 
         # Descifrar y mostrar mensaje
         cipher_response = AES.new(session_key, AES.MODE_CBC, iv_response)
         reply = unpad(cipher_response.decrypt(encrypted_reply), AES.block_size)
-        print(f"[Dispositivo] Respuesta del servidor: {reply.decode()}")
+        print(f"[Dispositivo] Respuesta del servidor: {reply.decode()}", flush=True)
+        time.sleep(demo_delay)
 
-# Recibe exactamente 'n' bytes del socket, esperando si es necesario hasta completar la cantidad.  
+# Recibe exactamente 'n' bytes del socket
 def recv_exact(sock, n):
     data = b""
     while len(data) < n:
@@ -110,5 +108,3 @@ def recv_exact(sock, n):
 
 if __name__ == "__main__":
     device_main("device1")
-
-
