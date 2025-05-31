@@ -81,11 +81,9 @@ def device_main(device_id):
         # Paso 6: Recibir respuesta cifrada
         iv_response = s.recv(16)
 
-        # Recibir mensaje cifrado
-        encrypted_reply = s.recv(1024)
-
-        # Recibir hash
-        hash_received = s.recv(32)
+        # Recibir mensaje cifrado y hash
+        encrypted_reply = recv_exact(s, 48)  
+        hash_received = recv_exact(s, 32)
 
         # Verificar integridad
         calculated_hash = hashlib.sha256(encrypted_reply).digest()
@@ -99,6 +97,16 @@ def device_main(device_id):
         cipher_response = AES.new(session_key, AES.MODE_CBC, iv_response)
         reply = unpad(cipher_response.decrypt(encrypted_reply), AES.block_size)
         print(f"[Dispositivo] Respuesta del servidor: {reply.decode()}")
+
+# Recibe exactamente 'n' bytes del socket, esperando si es necesario hasta completar la cantidad.  
+def recv_exact(sock, n):
+    data = b""
+    while len(data) < n:
+        packet = sock.recv(n - len(data))
+        if not packet:
+            raise ConnectionError("Conexión cerrada antes de recibir todos los datos")
+        data += packet
+    return data
 
 if __name__ == "__main__":
     device_main("device1")
