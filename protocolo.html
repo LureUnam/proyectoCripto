@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Protocolo de comunicación segura</title>
+<style>
+  body {
+    font-family: monospace;
+    background: #1e1e1e;
+    color: #ddd;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 10px;
+    text-align: center;
+    background: #0288d1;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2em;
+  }
+  .buttons-container {
+    text-align: center;
+    padding: 10px;
+  }
+  .btn {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+    width: 100%;
+    max-width: 200px;
+    margin: 5px auto;
+    display: block;
+    text-align: center;
+  }
+  #generateBtn {
+    background: #d32f2f;
+  }
+  #generateBtn:hover {
+    background: #b71c1c;
+  }
+  #startServerBtn {
+    background: #388e3c;
+  }
+  #startServerBtn:hover {
+    background: #2e7d32;
+  }
+  #startDeviceBtn {
+    background: #0288d1;
+  }
+  #startDeviceBtn:hover {
+    background: #0277bd;
+  }
+  .btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    gap: 15px;
+    padding: 15px;
+    box-sizing: border-box;
+  }
+  section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .console {
+    flex: 1;
+    background: #252526;
+    border-radius: 8px;
+    padding: 10px;
+    overflow-y: auto;
+    box-shadow: inset 0 0 10px #000;
+    margin-top: 10px;
+    width: 100%;
+  }
+  .message {
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    width: fit-content;
+    max-width: 95%;
+    white-space: pre-wrap;
+  }
+  .server-message {
+    background: #2e7d32;
+  }
+  .device-message {
+    background: #0277bd;
+  }
+  h2 {
+    margin: 0;
+    color: #4fc3f7;
+  }
+</style>
+</head>
+<body>
+  <header>Protocolo de comunicación segura</header>
+
+  <div class="buttons-container">
+    <button id="generateBtn" class="btn">Generar Claves RA</button>
+  </div>
+
+  <main>
+    <section>
+      <button id="startServerBtn" class="btn">Iniciar Servidor</button>
+      <h2>Servidor</h2>
+      <div class="console" id="serverLog"></div>
+    </section>
+
+    <section>
+      <button id="startDeviceBtn" class="btn">Iniciar Dispositivo</button>
+      <h2>Dispositivo</h2>
+      <div class="console" id="deviceLog"></div>
+    </section>
+  </main>
+
+<script>
+  const generateBtn = document.getElementById("generateBtn");
+  const startServerBtn = document.getElementById("startServerBtn");
+  const startDeviceBtn = document.getElementById("startDeviceBtn");
+  const serverLog = document.getElementById("serverLog");
+  const deviceLog = document.getElementById("deviceLog");
+  let wsServer = null;
+  let wsDevice = null;
+
+  function appendLog(element, message, source) {
+    const div = document.createElement("div");
+    div.className = "message";
+    div.classList.add(source === "server" ? "server-message" : "device-message");
+    div.textContent = message;
+    element.appendChild(div);
+    element.scrollTop = element.scrollHeight;
+  }
+
+  generateBtn.onclick = async () => {
+    generateBtn.disabled = true;
+    appendLog(serverLog, "--- Generando claves... ---", "server");
+    try {
+      const response = await fetch("/generate-keys", { method: "POST" });
+      const data = await response.json();
+      appendLog(serverLog, data.message, "server");
+    } catch (error) {
+      appendLog(serverLog, "Error al generar claves: " + error.message, "server");
+    }
+    generateBtn.disabled = false;
+  };
+
+  startServerBtn.onclick = async () => {
+    if (wsServer) {
+      wsServer.close();
+      wsServer = null;
+      startServerBtn.textContent = "Iniciar Servidor";
+      appendLog(serverLog, "--- Servidor detenido ---", "server");
+      await fetch("/stop-server", { method: "POST" });
+      return;
+    }
+
+    wsServer = new WebSocket("ws://" + location.host + "/ws-server");
+    startServerBtn.textContent = "Detener Servidor";
+    serverLog.textContent = "";
+
+    wsServer.onmessage = event => {
+      const data = JSON.parse(event.data);
+      if (data.source === "server") {
+        appendLog(serverLog, data.message, "server");
+      }
+    };
+
+    wsServer.onclose = () => {
+      appendLog(serverLog, "--- Conexión cerrada ---", "server");
+      startServerBtn.textContent = "Iniciar Servidor";
+      wsServer = null;
+    };
+
+    wsServer.onerror = err => {
+      appendLog(serverLog, "--- Error WebSocket ---", "server");
+      console.error("WebSocket error", err);
+    };
+  };
+
+  startDeviceBtn.onclick = () => {
+    if (wsDevice) {
+      wsDevice.close();
+      wsDevice = null;
+      startDeviceBtn.textContent = "Iniciar Dispositivo";
+      appendLog(deviceLog, "--- Dispositivo detenido ---", "device");
+      return;
+    }
+
+    wsDevice = new WebSocket("ws://" + location.host + "/ws-device");
+    startDeviceBtn.textContent = "Detener Dispositivo";
+    deviceLog.textContent = "";
+
+    wsDevice.onmessage = event => {
+      const data = JSON.parse(event.data);
+      if (data.source === "device") {
+        appendLog(deviceLog, data.message, "device");
+      }
+    };
+
+    wsDevice.onclose = () => {
+      appendLog(deviceLog, "--- Conexión cerrada ---", "device");
+      startDeviceBtn.textContent = "Iniciar Dispositivo";
+      wsDevice = null;
+    };
+
+    wsDevice.onerror = err => {
+      appendLog(deviceLog, "--- Error WebSocket ---", "device");
+      console.error("WebSocket error", err);
+    };
+  };
+</script>
+</body>
+</html>
