@@ -1,9 +1,11 @@
 ## En la carpeta del proyecto: 
 -tener python 3.13+
+
 -instalar dependencias con 'pip install fastapi uvicorn pycryptodome'
 
 ## Para correr el proyecto:
 -en terminal: 'python -m uvicorn web:app'.
+
 -abrir navegador en 'http://127.0.0.1:8000'.
 
 ## Guía de uso:
