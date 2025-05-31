@@ -1,79 +1,85 @@
+#Server
 from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import PKCS1_OAEP, AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+import socket
 import json
 import os
-import socket
 
 # Ruta al registro exportado por la RA
 data_dir = "ra_data"
 registry_path = os.path.join(data_dir, "registry.json")
 
-class Server:
-    def __init__(self):
-        self.device_registry = {}
-        self.load_registry()
+# Cargar clave privada del servidor
+with open(os.path.join(data_dir, "server_private.pem"), "rb") as f:
+    server_private_key = RSA.import_key(f.read())
 
-        # Generar par de claves del servidor (o cargar si ya existen)
-        self.server_key_path = os.path.join(data_dir, "server_priv.pem")
-        self.server_pub_path = os.path.join(data_dir, "server_pub.pem")
+# Cargar registro de dispositivos
+with open(registry_path, "r") as f:
+    registry = json.load(f)
 
-        if os.path.exists(self.server_key_path) and os.path.exists(self.server_pub_path):
-            with open(self.server_key_path, "rb") as f:
-                self.private_key = RSA.import_key(f.read())
-            with open(self.server_pub_path, "rb") as f:
-                self.public_key = RSA.import_key(f.read())
-        else:
-            key = RSA.generate(2048)
-            self.private_key = key
-            self.public_key = key.publickey()
-            with open(self.server_key_path, "wb") as f:
-                f.write(self.private_key.export_key())
-            with open(self.server_pub_path, "wb") as f:
-                f.write(self.public_key.export_key())
+print("Registro de dispositivos cargado en el servidor.")
 
-    def load_registry(self):
-        with open(registry_path, "r") as f:
-            self.device_registry = json.load(f)
-        print("Registro de dispositivos cargado en el servidor.")
+def handle_device(conn):
+    try:
+        # Paso 1: Recibir ID del dispositivo
+        device_id = conn.recv(1024).decode()
+        print(f"[Servidor] Dispositivo conectado: {device_id}")
 
-    def get_device_public_key(self, device_id):
-        entry = self.device_registry.get(device_id)
-        if entry:
-            return RSA.import_key(entry["public_key"].encode())
-        return None
+        if device_id not in registry:
+            print("[Servidor] Dispositivo no registrado.")
+            return
 
-    def start_server(self):
-        print("[Servidor] Esperando conexiones en puerto 9090...")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("localhost", 9090))
-            s.listen(1)
-            conn, addr = s.accept()
-            with conn:
-                print(f"[Servidor] Conexión establecida desde {addr}")
-                # Paso 1: Recibir ID del dispositivo
-                device_id = conn.recv(64).decode()
-                print(f"[Servidor] Dispositivo conectado: {device_id}")
-                device_pubkey = self.get_device_public_key(device_id)
-                if not device_pubkey:
-                    print("[Servidor] Dispositivo no registrado.")
-                    return
+        device_entry = registry[device_id]
+        device_pubkey = RSA.import_key(device_entry["public_key"].encode())
 
-                # Paso 2: Recibir nonce cifrado
-                encrypted_nonce = conn.recv(256)
-                cipher_rsa = PKCS1_OAEP.new(self.private_key)
-                try:
-                    device_nonce = cipher_rsa.decrypt(encrypted_nonce)
-                    print("[Servidor] Nonce recibido y descifrado.")
-                except Exception as e:
-                    print("[Servidor] Error al descifrar el nonce.")
-                    return
+        # Paso 2: Recibir nonce cifrado
+        encrypted_nonce = conn.recv(256)
+        cipher_rsa_priv = PKCS1_OAEP.new(server_private_key)
+        try:
+            nonce = cipher_rsa_priv.decrypt(encrypted_nonce)
+        except Exception as e:
+            print("[Servidor] Error al descifrar el nonce.", e)
+            return
 
-                # Paso 3: Enviar el mismo nonce cifrado con la clave pública del dispositivo
-                cipher_reply = PKCS1_OAEP.new(device_pubkey)
-                encrypted_response = cipher_reply.encrypt(device_nonce)
-                conn.sendall(encrypted_response)
-                print("[Servidor] Nonce reenviado al dispositivo.")
+        # Paso 3: Enviar el nonce de vuelta cifrado con clave pública del dispositivo
+        cipher_rsa_pub = PKCS1_OAEP.new(device_pubkey)
+        encrypted_response = cipher_rsa_pub.encrypt(nonce)
+        conn.sendall(encrypted_response)
+        print("[Servidor] Nonce verificado y reenviado.")
+
+        # Paso 4: Recibir clave de sesión cifrada
+        encrypted_session_key = conn.recv(256)
+        session_key = cipher_rsa_priv.decrypt(encrypted_session_key)
+        print("[Servidor] Clave de sesión recibida.")
+
+        # Paso 5: Recibir mensaje cifrado con AES
+        iv = conn.recv(16)
+        ciphertext = conn.recv(1024)
+        cipher_aes = AES.new(session_key, AES.MODE_CBC, iv)
+        message = unpad(cipher_aes.decrypt(ciphertext), AES.block_size)
+        print(f"[Servidor] Mensaje recibido: {message.decode()}")
+
+        # Paso 6: Enviar respuesta cifrada
+        response = b"Hola dispositivo, soy el servidor."
+        cipher_response = AES.new(session_key, AES.MODE_CBC)
+        response_encrypted = cipher_response.encrypt(pad(response, AES.block_size))
+        conn.sendall(cipher_response.iv + response_encrypted)
+        print("[Servidor] Respuesta enviada al dispositivo.")
+
+    except Exception as e:
+        print(f"[Servidor] Error durante la comunicaci\u00f3n: {e}")
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
-    server = Server()
-    server.start_server()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("localhost", 9090))
+        server.listen()
+        print("[Servidor] Esperando conexiones en puerto 9090...")
+
+        while True:
+            conn, addr = server.accept()
+            print(f"[Servidor] Conexi\u00f3n establecida desde {addr}")
+            handle_device(conn)
