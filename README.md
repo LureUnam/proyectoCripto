@@ -21,4 +21,4 @@ Puedes volver a probar en la misma página siguiendo los mismos pasos.
 - Asegurarse de que los puertos 8000 y 9090 estén libres.
 - Siempre detener servidor y dispositivo, recargar la página sin detener el servidor puede causar errores.
 - En caso de error cerrar la terminal y volver a correr el proyecto
-
+- El programa igualmente puede ser visto desde 2 consolas distintas, en una corremos RA.py y posteriormente Server.py, y en la otra consola corremos Device.py y observamos la comunicación.
