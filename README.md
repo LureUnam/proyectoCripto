@@ -1,7 +1,7 @@
 ## En la carpeta del proyecto: 
 -tener python 3.13+
 
--instalar dependencias con 'pip install fastapi uvicorn pycryptodome'
+-instalar dependencias con 'pip install fastapi uvicorn pycryptodome websockets'
 
 ## Para correr el proyecto:
 - en terminal: 'python -m uvicorn web:app'.
