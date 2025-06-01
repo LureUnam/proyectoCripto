@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Protocolo de comunicación segura</title>
+
+<!-- Estilos CSS para la página -->
 <style>
   body {
     font-family: monospace;
@@ -17,7 +19,7 @@
   header {
     padding: 10px;
     text-align: center;
-    background: #0288d1;
+    background: #0288d1; /* Azul para encabezado */
     color: white;
     font-weight: bold;
     font-size: 1.2em;
@@ -40,19 +42,19 @@
     text-align: center;
   }
   #generateBtn {
-    background: #d32f2f;
+    background: #d32f2f; /* Rojo para botón generar claves */
   }
   #generateBtn:hover {
     background: #b71c1c;
   }
   #startServerBtn {
-    background: #388e3c;
+    background: #388e3c; /* Verde para botón iniciar servidor */
   }
   #startServerBtn:hover {
     background: #2e7d32;
   }
   #startDeviceBtn {
-    background: #0288d1;
+    background: #0288d1; /* Azul para botón iniciar dispositivo */
   }
   #startDeviceBtn:hover {
     background: #0277bd;
@@ -76,7 +78,7 @@
   }
   .console {
     flex: 1;
-    background: #252526;
+    background: #252526; /* Fondo oscuro para consola */
     border-radius: 8px;
     padding: 10px;
     overflow-y: auto;
@@ -90,13 +92,13 @@
     margin-bottom: 8px;
     width: fit-content;
     max-width: 95%;
-    white-space: pre-wrap;
+    white-space: pre-wrap; /* Mantener saltos de línea */
   }
   .server-message {
-    background: #2e7d32;
+    background: #2e7d32; /* Verde para mensajes servidor */
   }
   .device-message {
-    background: #0277bd;
+    background: #0277bd; /* Azul para mensajes dispositivo */
   }
   h2 {
     margin: 0;
@@ -105,12 +107,16 @@
 </style>
 </head>
 <body>
+
+  <!-- Encabezado de la página -->
   <header>Protocolo de comunicación segura</header>
 
+  <!-- Contenedor del botón para generar claves -->
   <div class="buttons-container">
     <button id="generateBtn" class="btn">Generar Claves RA</button>
   </div>
 
+  <!-- Área principal dividida en dos secciones para servidor y dispositivo -->
   <main>
     <section>
       <button id="startServerBtn" class="btn">Iniciar Servidor</button>
@@ -125,28 +131,34 @@
     </section>
   </main>
 
+<!-- Script JavaScript para manejar eventos e interacciones -->
 <script>
+  // Referencias a botones y áreas de log
   const generateBtn = document.getElementById("generateBtn");
   const startServerBtn = document.getElementById("startServerBtn");
   const startDeviceBtn = document.getElementById("startDeviceBtn");
   const serverLog = document.getElementById("serverLog");
   const deviceLog = document.getElementById("deviceLog");
-  let wsServer = null;
-  let wsDevice = null;
+  let wsServer = null; // WebSocket para servidor
+  let wsDevice = null; // WebSocket para dispositivo
 
+  // Función para agregar mensajes al log visual en forma de burbuja
   function appendLog(element, message, source) {
     const div = document.createElement("div");
     div.className = "message";
     div.classList.add(source === "server" ? "server-message" : "device-message");
     div.textContent = message;
     element.appendChild(div);
+    // Auto scroll para siempre mostrar el último mensaje
     element.scrollTop = element.scrollHeight;
   }
 
+  // Evento click para generar claves
   generateBtn.onclick = async () => {
-    generateBtn.disabled = true;
+    generateBtn.disabled = true; // Deshabilita botón para evitar múltiples clics
     appendLog(serverLog, "--- Generando claves... ---", "server");
     try {
+      // Llama al endpoint backend para generar claves
       const response = await fetch("/generate-keys", { method: "POST" });
       const data = await response.json();
       appendLog(serverLog, data.message, "server");
@@ -156,20 +168,25 @@
     generateBtn.disabled = false;
   };
 
+  // Evento click para iniciar/detener el servidor
   startServerBtn.onclick = async () => {
     if (wsServer) {
+      // Si ya está activo, cierra la conexión y detiene el servidor
       wsServer.close();
       wsServer = null;
       startServerBtn.textContent = "Iniciar Servidor";
       appendLog(serverLog, "--- Servidor detenido ---", "server");
+      // Solicita al backend que detenga el proceso y libere recursos
       await fetch("/stop-server", { method: "POST" });
       return;
     }
 
+    // Si no está activo, abre conexión WebSocket con el servidor
     wsServer = new WebSocket("ws://" + location.host + "/ws-server");
     startServerBtn.textContent = "Detener Servidor";
-    serverLog.textContent = "";
+    serverLog.textContent = ""; // Limpia consola
 
+    // Cuando llegue mensaje del servidor, lo agrega al log
     wsServer.onmessage = event => {
       const data = JSON.parse(event.data);
       if (data.source === "server") {
@@ -177,20 +194,24 @@
       }
     };
 
+    // Cuando se cierre la conexión WebSocket, actualiza la interfaz
     wsServer.onclose = () => {
       appendLog(serverLog, "--- Conexión cerrada ---", "server");
       startServerBtn.textContent = "Iniciar Servidor";
       wsServer = null;
     };
 
+    // Maneja errores en WebSocket
     wsServer.onerror = err => {
       appendLog(serverLog, "--- Error WebSocket ---", "server");
       console.error("WebSocket error", err);
     };
   };
 
+  // Evento click para iniciar/detener el dispositivo
   startDeviceBtn.onclick = () => {
     if (wsDevice) {
+      // Si ya está activo, cierra la conexión
       wsDevice.close();
       wsDevice = null;
       startDeviceBtn.textContent = "Iniciar Dispositivo";
@@ -198,10 +219,12 @@
       return;
     }
 
+    // Si no está activo, abre WebSocket con el dispositivo
     wsDevice = new WebSocket("ws://" + location.host + "/ws-device");
     startDeviceBtn.textContent = "Detener Dispositivo";
     deviceLog.textContent = "";
 
+    // Agrega mensajes recibidos del dispositivo al log
     wsDevice.onmessage = event => {
       const data = JSON.parse(event.data);
       if (data.source === "device") {
@@ -209,12 +232,14 @@
       }
     };
 
+    // Cuando se cierra la conexión, actualiza la interfaz
     wsDevice.onclose = () => {
       appendLog(deviceLog, "--- Conexión cerrada ---", "device");
       startDeviceBtn.textContent = "Iniciar Dispositivo";
       wsDevice = null;
     };
 
+    // Manejo de errores en WebSocket
     wsDevice.onerror = err => {
       appendLog(deviceLog, "--- Error WebSocket ---", "device");
       console.error("WebSocket error", err);
