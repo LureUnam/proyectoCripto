@@ -1,3 +1,7 @@
+- Domínguez Morales Héctor Enrique
+- González Rico Martín
+- Yañez García Fernando
+
 ## En la carpeta del proyecto: 
 -tener python 3.13+
 
