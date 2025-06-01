@@ -4,9 +4,9 @@
 -instalar dependencias con 'pip install fastapi uvicorn pycryptodome'
 
 ## Para correr el proyecto:
--en terminal: 'python -m uvicorn web:app'.
+- en terminal: 'python -m uvicorn web:app'.
 
--abrir navegador en 'http://127.0.0.1:8000'.
+- abrir navegador en 'http://127.0.0.1:8000'.
 
 ## Guía de uso:
 1. Generar claves con botón rojo, esperar mensaje de confirmación.
@@ -16,4 +16,9 @@
 5. Detener servidor (Finaliza servidor y se libera el puerto).
 
 Puedes volver a probar en la misma página siguiendo los mismos pasos.
+
+# Nota
+- Asegurarse de que los puertos 8000 y 9090 estén libres.
+- Siempre detener servidor y dispositivo, recargar la página sin detener el servidor puede causar errores.
+- En caso de error cerrar la terminal y volver a correr el proyecto
 
